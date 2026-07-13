@@ -1,0 +1,73 @@
+name: Build Pippi Key and Monica Key
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  android:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.9"
+      - name: Build both APKs
+        run: |
+          gradle --no-daemon --console=plain --stacktrace \
+            :app:assemblePippiDebug \
+            :app:assembleMonicaDebug
+      - name: Verify APKs
+        run: |
+          test -s app/build/outputs/apk/pippi/debug/app-pippi-debug.apk
+          test -s app/build/outputs/apk/monica/debug/app-monica-debug.apk
+          sha256sum \
+            app/build/outputs/apk/pippi/debug/app-pippi-debug.apk \
+            app/build/outputs/apk/monica/debug/app-monica-debug.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PippiKey-debug-apk
+          path: app/build/outputs/apk/pippi/debug/app-pippi-debug.apk
+          if-no-files-found: error
+          retention-days: 30
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MonicaKey-debug-apk
+          path: app/build/outputs/apk/monica/debug/app-monica-debug.apk
+          if-no-files-found: error
+          retention-days: 30
+
+  relay:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: server
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.23.x"
+          cache-dependency-path: server/go.mod
+      - name: Test and build relay
+        run: |
+          gofmt -w .
+          go mod tidy
+          go test ./...
+          CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o monica-key-relay .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MonicaKey-relay-linux-amd64
+          path: server/monica-key-relay
+          if-no-files-found: error
+          retention-days: 30
