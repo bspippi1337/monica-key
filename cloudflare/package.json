@@ -1,0 +1,15 @@
+{
+  "name": "monica-key-relay",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "check": "wrangler deploy --dry-run --outdir .wrangler-dist",
+    "deploy": "wrangler deploy"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20260713.0",
+    "typescript": "^5.8.3",
+    "wrangler": "^4.0.0"
+  }
+}
