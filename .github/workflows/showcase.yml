@@ -11,6 +11,14 @@ on:
       - ".github/workflows/showcase.yml"
       - "*.gradle.kts"
       - "gradle.properties"
+  pull_request:
+    paths:
+      - "app/**"
+      - "tools/prepare-source.py"
+      - "tools/prepare-showcase.py"
+      - ".github/workflows/showcase.yml"
+      - "*.gradle.kts"
+      - "gradle.properties"
 
 permissions:
   contents: write
@@ -53,6 +61,7 @@ jobs:
           sha256sum dist/MonicaKey-Showcase.apk | tee dist/SHA256SUMS.txt
 
       - name: Publish showcase release
+        if: github.event_name != 'pull_request'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
