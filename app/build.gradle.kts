@@ -3,6 +3,12 @@ plugins {
     id("org.jetbrains.kotlin.android")
 }
 
+val relayUrl = providers.environmentVariable("MONICA_RELAY_URL")
+    .orElse("https://relay-not-configured.invalid")
+    .get()
+    .trim()
+    .trimEnd('/')
+
 android {
     namespace = "no.blckswan.monicakey"
     compileSdk = 35
@@ -11,8 +17,9 @@ android {
         applicationId = "no.blckswan.keypair"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.2.0"
+        versionCode = 2
+        versionName = "0.3.0"
+        buildConfigField("String", "RELAY_URL", "\"${relayUrl.replace("\\", "\\\\").replace("\"", "\\\"")}\"")
     }
 
     flavorDimensions += "owner"
