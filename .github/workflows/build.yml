@@ -10,10 +10,9 @@ permissions:
   contents: write
 
 jobs:
-  verify:
-    name: Verify Worker and Android
+  build:
     runs-on: ubuntu-24.04
-    timeout-minutes: 35
+    timeout-minutes: 45
 
     steps:
       - uses: actions/checkout@v4
@@ -21,8 +20,6 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
-          cache: npm
-          cache-dependency-path: cloudflare/package.json
 
       - name: Install Worker tooling
         run: npm install --prefix cloudflare --no-audit --no-fund
@@ -30,35 +27,8 @@ jobs:
       - name: Validate Cloudflare Worker bundle
         run: npm run check --prefix cloudflare
 
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: "17"
-
-      - uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: "8.9"
-
-      - name: Verify both Android variants
-        env:
-          MONICA_RELAY_URL: https://relay-validation.invalid
-        run: |
-          python3 tools/prepare-source.py
-          gradle --no-daemon --console=plain --stacktrace \
-            :app:assemblePippiDebug \
-            :app:assembleMonicaDebug
-
-  deploy-build-release:
-    name: Deploy relay and publish APKs
-    if: github.event_name != 'pull_request'
-    needs: verify
-    runs-on: ubuntu-24.04
-    timeout-minutes: 40
-
-    steps:
-      - uses: actions/checkout@v4
-
       - name: Require Cloudflare credentials
+        if: github.event_name != 'pull_request'
         env:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -72,16 +42,8 @@ jobs:
             exit 1
           }
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-          cache: npm
-          cache-dependency-path: cloudflare/package.json
-
-      - name: Install Worker tooling
-        run: npm install --prefix cloudflare --no-audit --no-fund
-
       - name: Deploy free Cloudflare Durable Object relay
+        if: github.event_name != 'pull_request'
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -90,6 +52,7 @@ jobs:
           command: deploy
 
       - name: Resolve and verify relay URL
+        if: github.event_name != 'pull_request'
         id: relay
         env:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -105,22 +68,19 @@ jobs:
             echo "Could not resolve workers.dev subdomain"
             exit 1
           }
+
           relay_url="https://monica-key-relay.${subdomain}.workers.dev"
           echo "url=$relay_url" >> "$GITHUB_OUTPUT"
           echo "Relay: $relay_url"
 
-          healthy=0
           for attempt in $(seq 1 30); do
             if curl -fsS --max-time 10 "$relay_url/healthz" | jq -e '.ok == true' >/dev/null; then
-              healthy=1
-              break
+              exit 0
             fi
             sleep 2
           done
-          test "$healthy" = 1 || {
-            echo "Relay failed health check"
-            exit 1
-          }
+          echo "Relay failed health check"
+          exit 1
 
       - uses: actions/setup-java@v4
         with:
@@ -131,9 +91,9 @@ jobs:
         with:
           gradle-version: "8.9"
 
-      - name: Build both APKs against the live relay
+      - name: Build Pippi Key and Monica Key
         env:
-          MONICA_RELAY_URL: ${{ steps.relay.outputs.url }}
+          MONICA_RELAY_URL: ${{ steps.relay.outputs.url || 'https://relay-validation.invalid' }}
         run: |
           python3 tools/prepare-source.py
           gradle --no-daemon --console=plain --stacktrace \
@@ -141,6 +101,7 @@ jobs:
             :app:assembleMonicaDebug
 
       - name: Prepare release files
+        if: github.event_name != 'pull_request'
         run: |
           mkdir -p dist
           cp app/build/outputs/apk/pippi/debug/app-pippi-debug.apk \
@@ -154,6 +115,7 @@ jobs:
             | tee dist/SHA256SUMS.txt
 
       - name: Publish rolling release
+        if: github.event_name != 'pull_request'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
