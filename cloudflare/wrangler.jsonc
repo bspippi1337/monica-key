@@ -5,13 +5,18 @@
   "compatibility_date": "2026-07-13",
   "workers_dev": true,
   "observability": {
-    "enabled": true
+    "enabled": true,
+    "head_sampling_rate": 0
   },
   "durable_objects": {
     "bindings": [
       {
         "name": "CHANNELS",
         "class_name": "ChannelRoom"
+      },
+      {
+        "name": "RATE_GATES",
+        "class_name": "RateGate"
       }
     ]
   },
@@ -19,6 +24,10 @@
     {
       "tag": "v1",
       "new_sqlite_classes": ["ChannelRoom"]
+    },
+    {
+      "tag": "v2",
+      "new_sqlite_classes": ["RateGate"]
     }
   ]
 }
