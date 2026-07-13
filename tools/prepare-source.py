@@ -70,17 +70,83 @@ replace_once(
             .put("channelId", config.channelId)
             .put("claimSecret", config.claimSecret)
 
-        // Invitasjonen lages lokalt med en gang. Nettverk skal aldri blokkere deling.
+        // Deling må fungere selv om relayen akkurat redeployer eller nettet er nede.
         done(true, "Invitasjonen er klar")
 
-        post("/v1/channels", body) { ok, message ->
+        post("/v1/channels", body) { ok, _ ->
             AppBus.status = if (ok) {
                 "Privat kanal er klar"
             } else {
-                "Invitasjonen er lagret • cloud-relay kobler seg til automatisk"
+                "Invitasjonen er lagret • kobler automatisk når nettet er klart"
             }
             AppBus.changed()
             if (ok) connect()
+        }
+    }''',
+)
+
+replace_once(
+    live_client,
+    '''    fun claimForMonica(done: (Boolean, String) -> Unit) {
+        val channel = config.channelId
+        val claim = config.claimSecret
+        if (config.role != Role.MONICA || channel == null || claim == null) {
+            done(false, "Invitasjonen mangler kanal eller engangsnøkkel")
+            return
+        }
+        var privateKey = config.revokePrivateKey
+        var publicKey = config.revokePublicKey
+        if (privateKey == null || publicKey == null) {
+            val pair = RevokeKeys.generate()
+            privateKey = pair.privateKey
+            publicKey = pair.publicKey
+            config.revokePrivateKey = privateKey
+            config.revokePublicKey = publicKey
+        }
+        val body = JSONObject()
+            .put("claimSecret", claim)
+            .put("revokePublicKey", publicKey)
+        post("/v1/channels/$channel/claim", body) { ok, message ->
+            if (ok) config.claimSecret = null
+            done(ok, message)
+        }
+    }''',
+    '''    fun claimForMonica(done: (Boolean, String) -> Unit) {
+        val channel = config.channelId
+        val claim = config.claimSecret
+        if (config.role != Role.MONICA || channel == null || claim == null) {
+            done(false, "Invitasjonen mangler kanal eller engangsnøkkel")
+            return
+        }
+        var privateKey = config.revokePrivateKey
+        var publicKey = config.revokePublicKey
+        if (privateKey == null || publicKey == null) {
+            val pair = RevokeKeys.generate()
+            privateKey = pair.privateKey
+            publicKey = pair.publicKey
+            config.revokePrivateKey = privateKey
+            config.revokePublicKey = publicKey
+        }
+
+        // Monica kan fullføre oppsettet selv om Pippi delte mens han var offline.
+        val createBody = JSONObject()
+            .put("channelId", channel)
+            .put("claimSecret", claim)
+
+        post("/v1/channels", createBody) { created, createMessage ->
+            if (!created) {
+                done(false, createMessage)
+                return@post
+            }
+
+            val claimBody = JSONObject()
+                .put("claimSecret", claim)
+                .put("revokePublicKey", publicKey)
+
+            post("/v1/channels/$channel/claim", claimBody) { ok, message ->
+                if (ok) config.claimSecret = null
+                done(ok, message)
+            }
         }
     }''',
 )
