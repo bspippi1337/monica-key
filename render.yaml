@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: bspippi1337-monica-key-relay
+    runtime: go
+    region: frankfurt
+    plan: starter
+    rootDir: server
+    buildCommand: go mod download && go build -trimpath -ldflags="-s -w" -o monica-key-relay .
+    startCommand: ./monica-key-relay
+    autoDeployTrigger: commit
+    healthCheckPath: /healthz
+    maxShutdownDelaySeconds: 30
+    envVars:
+      - key: MONICA_KEY_ADDR
+        value: :10000
+      - key: MONICA_KEY_DATA
+        value: /var/lib/monica-key
+    disk:
+      name: monica-key-data
+      mountPath: /var/lib/monica-key
+      sizeGB: 1
